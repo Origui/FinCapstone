@@ -141,6 +141,12 @@ async function doLogin() {
 
     updateAuthUI();
     await loadChatRooms();
+    if (typeof loadNotesFromApi === 'function') {
+      await loadNotesFromApi(); 
+    }
+    if (typeof loadStudyMemos === 'function') {
+      await loadStudyMemos();
+    }
     showToast(`${currentUser.name}님 로그인되었습니다.`, "🎉");
 
   } catch (error) {
@@ -163,9 +169,26 @@ function logout() {
 
   document.getElementById('chat-room-view').style.display = 'none';
   document.getElementById('chat-list-view').style.display = 'block';
+  if (typeof notes !== 'undefined' && Array.isArray(notes)) {
+    notes.length = 0; // 전역 오답노트 배열 비우기
+  }
+  
+  if (typeof renderNotes === 'function') {
+    renderNotes(); // 로그인 체크 후 "로그인 후 확인할 수 있습니다" 문구 출력 유도
+  }
+  
+  if (typeof renderStudyMemos === 'function') {
+    renderStudyMemos([]); // 빈 배열을 전달하여 메모장 초기화 혹은 안내문구 출력 유도
+  }
 
   updateAuthUI();
   loadChatRooms();
+
+  if (window.currentPage === 'mypage') {
+    if (typeof showPage === 'function') {
+      showPage('home'); // 만약 홈화면 ID가 'home'이 아니면 'main' 등으로 변경
+    }
+  }
 
   showToast("로그아웃되었습니다.", "👋");
 }

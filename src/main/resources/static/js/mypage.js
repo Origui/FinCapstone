@@ -20,7 +20,14 @@ function switchMyPageTab(tabId, element) {
   renderMyPageMockData(tabId);
 }
 
-function renderMyPageMockData(tabId) {
+function loadSavedSummaryToStudyPage(noteId) {
+  console.log(`요약 노트 #${noteId}를 불러옵니다.`);
+  // 예: 학습 탭/페이지로 이동 후 해당 noteId로 단건 API를 조회하여 화면에 뿌려주는 로직 작성
+  // showPage('study'); 
+  // fetchAndRenderDetailSummary(noteId);
+}
+
+async function renderMyPageMockData(tabId) {
 
   if (typeof currentUser === 'undefined') {
     window.currentUser = { id: 1, name: "테스트 유저" };
@@ -31,46 +38,157 @@ function renderMyPageMockData(tabId) {
 
   if (tabId === 'pdf') {
     const pdfList = document.getElementById('mypage-pdf-list');
-    pdfList.innerHTML = `
-      <div class="note-card" style="--ncolor: var(--accent);">
-        <div class="note-meta">
-          <span class="note-subject" style="background:rgba(99,179,237,0.1); color:var(--accent);">운영체제</span>
-          <span class="note-date">2026.05.28</span>
-        </div>
-        <div class="note-title">CPU 스케줄링 및 데드락 챕터 요약</div>
-        <div class="note-q" style="background:var(--bg); border:1px solid var(--border);">
-          핵심 키워드: 프로세스, 선점형 스케줄링, 교착상태 4가지 조건...
-        </div>
-        <button class="btn-secondary" style="margin-top:14px; width:100%;">요약본 다시 보기</button>
-      </div>
-      <div class="note-card" style="--ncolor: var(--accent);">
-        <div class="note-meta">
-          <span class="note-subject" style="background:rgba(99,179,237,0.1); color:var(--accent);">프로젝트 기획</span>
-          <span class="note-date">2026.05.20</span>
-        </div>
-        <div class="note-title">지역 관광 활성화 캐시백 정책 자료</div>
-        <div class="note-q" style="background:var(--bg); border:1px solid var(--border);">
-          핵심 키워드: 방문자 통계, 인센티브 구조, 문제 정의...
-        </div>
-        <button class="btn-secondary" style="margin-top:14px; width:100%;">요약본 다시 보기</button>
-      </div>
-    `;
-  } 
+    if (!pdfList) return;
+
+    pdfList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text3);">요약 기록을 불러오는 중입니다...</div>`;
+
+    // 1. 유저 아이디 가져오기 (비로그인시 테스트 아이디 제공)
+    const savedUser = JSON.parse(localStorage.getItem("currentUser"));
+    let userId = savedUser ? savedUser.id : (sessionStorage.getItem("userId") || localStorage.getItem("userId") || "guest");
+    
+    try {
+      // 2. DB 연동 API 호출
+      const response = await fetch('/api/pdf/summaries', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("서버로부터 데이터를 가져오지 못했습니다.");
+      }
+
+      const mySummaries = await response.json(); 
+
+      if (!mySummaries || mySummaries.length === 0) {
+        pdfList.innerHTML = `
+          <div style="text-align:center; padding:40px; color:var(--text3);">
+            저장된 AI 요약 기록이 없습니다.
+          </div>`;
+        return;
+      }
+
+      // 3. 동적 HTML 렌더링
+      pdfList.innerHTML = mySummaries.map(note => {
+        // 요약 내용 안전 가드 및 글자수 제한 처리
+        const rawSummary = note.summary || '요약 내용 없음';
+        const shortSummary = rawSummary.length > 80 
+          ? rawSummary.substring(0, 80) + '...' 
+          : rawSummary;
+
+        // 날짜 형식 예외 처리 (YYYY-MM-DD)
+        const dateStr = note.createdAt && note.createdAt.includes('T')
+          ? note.createdAt.split('T')[0] 
+          : (note.createdAt || '확인 불가');
+
+        return `
+          <div class="post-item" onclick="loadSavedSummaryToStudyPage(${note.id})" style="cursor:pointer; margin-bottom:12px;">
+            <div class="post-main">
+              <div class="post-title" style="font-weight:600; font-size:16px; color:var(--text1); margin-bottom:8px;">
+                📄 요약 노트 #${note.id}
+              </div>
+              <div class="post-content" style="font-size:14px; color:var(--text2); line-height:1.5; margin-bottom:10px;">
+                ${shortSummary}
+              </div>
+              <div class="post-info" style="font-size:12px; color:var(--text3);">
+                <span>❓ 퀴즈: ${note.quizQuestion ? '✅ 생성됨' : '❌ 없음'}</span>
+                <span style="margin-left: 15px;">📅 저장일: ${dateStr}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    } catch (error) {
+      console.error("마이페이지 연동 에러:", error);
+      pdfList.innerHTML = `
+        <div style="text-align:center; padding:40px; color:red;">
+          데이터를 로드하는 중 오류가 발생했습니다.<br>
+          <small style="color:var(--text3); font-size:12px;">${error.message}</small>
+        </div>`;
+    }
+    return;
+  }
+  
   else if (tabId === 'quiz') {
     const quizList = document.getElementById('mypage-quiz-list');
-    quizList.innerHTML = `
-      <div class="note-card" style="--ncolor: var(--accent3);">
-        <div class="note-meta">
-          <span class="note-subject" style="background:rgba(246,173,85,0.1); color:var(--accent3);">알고리즘</span>
-          <span class="note-date">2026.05.25</span>
+    if (!quizList) return;
+
+    // 1) note-quiz.js에 정의된 함수나 전역 변수를 통해 최신 오답노트 배열 가져오기
+    let activeNotes = [];
+    if (typeof window.getAppNotes === 'function') {
+      activeNotes = window.getAppNotes();
+    } else if (typeof window.notes !== 'undefined') {
+      activeNotes = window.notes;
+    }
+
+    // 2) 데이터가 없을 때 안내문 출력
+    if (!activeNotes || !Array.isArray(activeNotes) || activeNotes.length === 0) {
+      quizList.innerHTML = `
+        <div style="text-align:center; padding:40px; color:var(--text3);">
+          저장된 오답노트 기록이 없습니다.<br>
+          <small style="font-size:12px; color:var(--text4); display:block; margin-top:6px;">
+            AI 학습에서 퀴즈를 풀고 오답을 기록해 보세요!
+          </small>
+        </div>`;
+      return;
+    }
+
+    // 3) saveWrongQuizNote 구조에 맞추어 오답노트 리스트 렌더링
+    quizList.innerHTML = activeNotes.map(note => {
+      // 데이터 누락을 방지하기 위한 예외 처리 변수들
+      const noteTitle = note.title || `AI 예상문제 오답 (${note.subject || '전체'})`;
+      const questionText = note.q || '문제가 없습니다.';
+      const myWrongAnswer = note.wrong || '선택 또는 입력 안 함';
+      const correctAnswerAndDesc = note.correct || '정답 정보가 없습니다.';
+      const registerDate = note.date || '최근';
+      const borderLeftColor = note.color || '#ef4444'; // 과목별 고유 색상 또는 기본 붉은색
+
+      return `
+        <div class="post-item" style="margin-bottom:15px; border-left: 4px solid ${borderLeftColor}; padding: 15px; background: var(--bg2); border-radius: 4px;">
+          <div class="post-main">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <span class="post-title" style="font-weight:600; font-size:14px; color:var(--text1);">
+                ❌ ${escapeHtml(noteTitle)}
+              </span>
+              <span style="font-size:12px; color:var(--text3); font-weight: 500;">
+                📚 ${escapeHtml(note.subject || '일반')}
+              </span>
+            </div>
+            
+            <div class="post-content" style="font-size:14px; color:var(--text1); font-weight:500; margin-bottom:12px; line-height:1.4;">
+              ${escapeHtml(questionText)}
+            </div>
+            
+            <div style="background: var(--bg1); padding: 12px; border-radius: 6px; font-size:13px; line-height:1.6;">
+              <div style="color: #f87171; font-weight: 500;">
+                <strong>❌ 나의 오답:</strong> ${escapeHtml(myWrongAnswer)}
+              </div>
+              <div style="color: #4ade80; margin-top:6px; font-weight: 500; white-space: pre-wrap;"><strong>✅ 실제 정답 및 해설:</strong>\n${escapeHtml(correctAnswerAndDesc)}</div>
+            </div>
+
+            <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 11px; color: var(--text3);">
+                📅 기록일: ${escapeHtml(registerDate)}
+              </span>
+              
+              ${typeof window.deleteNote === 'function' ? `
+                <button 
+                  onclick="if(confirm('이 오답노트를 삭제하시겠습니까?')){ window.deleteNote(${note.id}).then(() => switchMyPageTab('quiz', document.querySelector('#mypage-tabs .btab.active')) ) }"
+                  style="background:transparent; border:none; color:var(--text3); font-size:12px; cursor:pointer; text-decoration:underline;"
+                  onmouseover="this.style.color='#ef4444'"
+                  onmouseout="this.style.color='var(--text3)'"
+                >
+                  지우기
+                </button>
+              ` : ''}
+            </div>
+          </div>
         </div>
-        <div class="note-title">트리 탐색 서술형 3문제 세트</div>
-        <div class="note-q" style="background:var(--bg); border:1px solid var(--border);">
-          생성 난이도: 어려움 (Hard)<br>맞춘 문제: 2 / 3
-        </div>
-        <button class="btn-secondary" style="margin-top:14px; width:100%;">결과 리포트 보기</button>
-      </div>
-    `;
+      `;
+    }).join('');
   }
   else if (tabId === 'posts') {
 
