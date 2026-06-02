@@ -191,12 +191,29 @@ public class PdfController {
         }
 
         ReverseLearningLog log = learningDataService.saveReverseLearningLog(
+                userId,
                 parseOptionalLong(request.get("summaryId")),
                 request.get("reverseQuestion"),
                 request.get("userAnswer"),
                 request.get("aiFeedback"));
 
         return ResponseEntity.ok(log);
+    }
+
+    @GetMapping("/reverse-log")
+    public ResponseEntity<List<ReverseLearningLog>> getMyReverseLogs(
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+
+        if (isGuestUser(userId)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        // 해당 로그인 유저의 아이디로 저장된 전체 피드백 내역 리스트 조회
+        // 💡 learningDataService 내에 이 메서드를 추가하고 Repository에서 findByUserId 등으로 쿼리하게 연동해
+        // 줍니다.
+        List<ReverseLearningLog> logs = learningDataService.getReverseLearningLogsByUserId(userId);
+
+        return ResponseEntity.ok(logs);
     }
 
     @PostMapping("/memo")

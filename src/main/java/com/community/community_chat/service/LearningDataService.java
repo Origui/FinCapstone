@@ -33,8 +33,6 @@ public class LearningDataService {
         SummaryNote note = new SummaryNote();
         note.setPdfId(pdfId);
         note.setSummary(summary);
-        note.setQuizQuestion(quizQuestion);
-        note.setQuizAnswer(quizAnswer);
         note.setPageNumber(1);
         note.setUserId(userId);
         return summaryNoteRepository.save(note);
@@ -54,19 +52,25 @@ public class LearningDataService {
         return summaryNoteRepository.findByUserId(userId);
     }
 
-    public ReverseLearningLog saveReverseLearningLog(Long summaryId, String reverseQuestion, String userAnswer,
+    public ReverseLearningLog saveReverseLearningLog(String userId, Long summaryId, String reverseQuestion,
+            String userAnswer,
             String aiFeedback) {
         ReverseLearningLog log = new ReverseLearningLog();
         log.setSummaryId(summaryId);
         log.setReverseQuestion(reverseQuestion);
         log.setUserAnswer(userAnswer);
         log.setAiFeedback(aiFeedback);
-        log.setUserId("guest");
+        log.setUserId(normalizeUserId(userId));
         return reverseLearningLogRepository.save(log);
     }
 
     public List<ReverseLearningLog> getReverseLogs(Long summaryId) {
         return reverseLearningLogRepository.findBySummaryId(summaryId);
+    }
+
+    public List<ReverseLearningLog> getReverseLearningLogsByUserId(String userId) {
+        // Repository에 findByUserId 가 구현되어 있어야 합니다. (최신순 조회를 원하면 OrderBy 컬럼명Desc 조합 권장)
+        return reverseLearningLogRepository.findByUserId(normalizeUserId(userId));
     }
 
     public StudyMemo saveMemo(String userId, Long summaryId, String memoContent) {

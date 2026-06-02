@@ -21,12 +21,6 @@ public class SummaryNote {
     @Column(columnDefinition = "CLOB")
     private String summary;
 
-    @Lob
-    @Column(columnDefinition = "CLOB")
-    private String quizQuestion;
-
-    private String quizAnswer;
-
     private int pageNumber;
     private String userId;
     private LocalDateTime cratedAt = LocalDateTime.now();

@@ -20,11 +20,83 @@ function switchMyPageTab(tabId, element) {
   renderMyPageMockData(tabId);
 }
 
-function loadSavedSummaryToStudyPage(noteId) {
-  console.log(`요약 노트 #${noteId}를 불러옵니다.`);
-  // 예: 학습 탭/페이지로 이동 후 해당 noteId로 단건 API를 조회하여 화면에 뿌려주는 로직 작성
-  // showPage('study'); 
-  // fetchAndRenderDetailSummary(noteId);
+async function loadSavedSummaryToStudyPage(noteId) {
+  try {
+    const response = await fetch(`/api/pdf/summary/${noteId}`);
+
+    if (!response.ok) {
+      throw new Error('요약 노트를 불러오지 못했습니다.');
+    }
+
+    const note = await response.json();
+    openSummaryDetailModal(note);
+
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || '요약 노트 조회 실패', '❌');
+  }
+}
+
+function openSummaryDetailModal(note) {
+  let modal = document.getElementById('summaryDetailModal');
+
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'summaryDetailModal';
+
+    modal.innerHTML = `
+      <div class="modal" style="max-width:760px; max-height:82vh; overflow:auto;">
+        <div style="margin-bottom:22px;">
+          <h2 style="font-family:var(--font-mono); color:var(--text); margin-bottom:8px;">
+            PDF 요약 노트
+          </h2>
+          <p id="summary-detail-meta" style="font-size:13px; color:var(--text2); margin:0;"></p>
+        </div>
+
+        <div>
+          <h3 style="font-size:16px; font-weight:800; margin-bottom:10px; color:var(--text);">
+            요약 내용
+          </h3>
+          <div id="summary-detail-content"
+            style="white-space:pre-wrap; line-height:1.8; font-size:14px; color:var(--text2); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px;">
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:24px;">
+          <button class="btn-outline" onclick="closeSummaryDetailModal()">
+            닫기
+          </button>
+        </div>
+      </div>
+    `;
+
+    modal.addEventListener('click', e => {
+      if (e.target === modal) {
+        closeSummaryDetailModal();
+      }
+    });
+
+    document.body.appendChild(modal);
+  }
+
+  const savedAt = note.createdAt || note.cratedAt;
+  const dateStr = savedAt ? String(savedAt).split('T')[0] : '확인 불가';
+
+  document.getElementById('summary-detail-meta').textContent =
+    `요약 노트 #${note.id} · 저장일 ${dateStr}`;
+
+  document.getElementById('summary-detail-content').textContent =
+    note.summary || '저장된 요약 내용이 없습니다.';
+
+  modal.classList.add('open');
+}
+
+function closeSummaryDetailModal() {
+  const modal = document.getElementById('summaryDetailModal');
+  if (modal) {
+    modal.classList.remove('open');
+  }
 }
 
 async function renderMyPageMockData(tabId) {
@@ -79,21 +151,20 @@ async function renderMyPageMockData(tabId) {
           : rawSummary;
 
         // 날짜 형식 예외 처리 (YYYY-MM-DD)
-        const dateStr = note.createdAt && note.createdAt.includes('T')
-          ? note.createdAt.split('T')[0] 
-          : (note.createdAt || '확인 불가');
+        const dateStr = note.cratedAt && note.cratedAt.includes('T')
+          ? note.cratedAt.split('T')[0] 
+          : (note.cratedAt || '확인 불가');
 
         return `
           <div class="post-item" onclick="loadSavedSummaryToStudyPage(${note.id})" style="cursor:pointer; margin-bottom:12px;">
             <div class="post-main">
               <div class="post-title" style="font-weight:600; font-size:16px; color:var(--text1); margin-bottom:8px;">
-                📄 요약 노트 #${note.id}
+                📄 요약 노트
               </div>
               <div class="post-content" style="font-size:14px; color:var(--text2); line-height:1.5; margin-bottom:10px;">
                 ${shortSummary}
               </div>
               <div class="post-info" style="font-size:12px; color:var(--text3);">
-                <span>❓ 퀴즈: ${note.quizQuestion ? '✅ 생성됨' : '❌ 없음'}</span>
                 <span style="margin-left: 15px;">📅 저장일: ${dateStr}</span>
               </div>
             </div>
@@ -189,6 +260,113 @@ async function renderMyPageMockData(tabId) {
         </div>
       `;
     }).join('');
+  }
+  else if (tabId === 'feedback') {
+    const feedbackList = document.getElementById('mypage-feedback-list');
+    if (!feedbackList) return;
+
+    feedbackList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text3);">AI 피드백 기록을 불러오는 중입니다...</div>`;
+
+    // 1. 로그인 유저 아이디 추출 (pdf-study.js 규격과 매칭)
+    let userId = sessionStorage.getItem("userId") || localStorage.getItem("userId");
+    if (!userId && typeof window.getCurrentUserId === 'function') {
+      userId = window.getCurrentUserId();
+    }
+
+    // 비로그인 Guest 유저 예외 처리
+    if (!userId || userId === "guest") {
+      feedbackList.innerHTML = `
+        <div style="text-align:center; padding:40px; color:var(--text3);">
+          🔑 로그인이 필요한 서비스입니다.<br>
+          <small style="font-size:12px; color:var(--text4); display:block; margin-top:6px;">
+            로그인 후 AI 역질문 피드백 데이터를 연동할 수 있습니다.
+          </small>
+        </div>`;
+      return;
+    }
+
+    try {
+      // 2. 백엔드 새로 만든 GET API 호출
+      const response = await fetch('/api/pdf/reverse-log', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json;charset=UTF-8',
+          'X-User-Id': String(userId)
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`서버 상태 에러 (${response.status})`);
+      }
+
+      const myFeedbacks = await response.json();
+
+      if (!myFeedbacks || myFeedbacks.length === 0) {
+        feedbackList.innerHTML = `
+          <div style="text-align:center; padding:40px; color:var(--text3);">
+            저장된 AI 역질문 피드백 내역이 없습니다.<br>
+            <small style="font-size:12px; color:var(--text4); display:block; margin-top:6px;">
+              PDF 요약 페이지에서 AI의 역질문에 답변하고 피드백을 저장해 보세요!
+            </small>
+          </div>`;
+        return;
+      }
+
+      // 3. 데이터 루프 돌며 동적 HTML 생성 (카드 레이아웃)
+      feedbackList.innerHTML = myFeedbacks.map(log => {
+        const dateStr = log.createdAt && log.createdAt.includes('T') 
+          ? log.createdAt.split('T')[0] 
+          : (log.createdAt || '최근 학습');
+
+        return `
+          <div class="post-item" style="cursor: default; margin-bottom: 16px; padding: 20px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;">
+            <div class="post-main" style="width: 100%;">
+              
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px dashed var(--border); padding-bottom: 8px;">
+                <span style="font-weight: 700; font-size: 14px; color: var(--accent);">
+                  🤖 AI 구술 피드백
+                </span>
+                <span style="font-size: 12px; color: var(--text3);">📅 ${dateStr}</span>
+              </div>
+              
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: var(--text3); font-weight: 600; margin-bottom: 4px;">AI 역질문</div>
+                <div style="color: var(--text1); font-size: 13.5px; line-height: 1.5;">
+                  ${localEscapeHtml(log.reverseQuestion)}
+                </div>
+              </div>
+              
+              <div style="margin-bottom: 16px; background: rgba(0, 0, 0, 0.2); padding: 12px; border-radius: 8px; border-left: 3px solid var(--text4);">
+                <div style="font-size: 11px; color: var(--text3); margin-bottom: 4px; font-weight: 600;">나의 답변</div>
+                <div style="color: var(--text2); font-size: 13px; line-height: 1.5; white-space: pre-wrap;">
+                  ${localEscapeHtml(log.userAnswer || '작성된 내용이 없습니다.')}
+                </div>
+              </div>
+              
+              <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.15); padding: 14px; border-radius: 8px;">
+                <div style="font-size: 12px; color: var(--accent); font-weight: bold; margin-bottom: 6px;">
+                  📊 AI 평가 리포트
+                </div>
+                <div style="color: var(--text1); font-size: 13px; line-height: 1.6; white-space: pre-wrap;">
+                  ${localEscapeHtml(log.aiFeedback)}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    } catch (error) {
+      console.error("마이페이지 AI 피드백 탭 바인딩 에러:", error);
+      feedbackList.innerHTML = `
+        <div style="text-align:center; padding:40px; color:var(--text3);">
+          ⚠️ 피드백 기록을 불러오지 못했습니다.<br>
+          <small style="color:#ef4444; font-size:12px; display:block; margin-top:4px;">
+            원인: 백엔드 목록조회 API 엔드포인트를 점검해 주세요. (${error.message})
+          </small>
+        </div>`;
+    }
   }
   else if (tabId === 'posts') {
 
@@ -355,3 +533,12 @@ document.addEventListener('click', e => {
     switchMyPageTab('pdf', firstTab); 
   }
 });
+
+function localEscapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
