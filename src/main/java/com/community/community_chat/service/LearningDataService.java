@@ -1,10 +1,8 @@
 package com.community.community_chat.service;
 
-import com.community.community_chat.entity.PdfDocument;
 import com.community.community_chat.entity.ReverseLearningLog;
 import com.community.community_chat.entity.StudyMemo;
 import com.community.community_chat.entity.SummaryNote;
-import com.community.community_chat.repository.PdfDocumentRepository;
 import com.community.community_chat.repository.ReverseLearningLogRepository;
 import com.community.community_chat.repository.StudyMemoRepository;
 import com.community.community_chat.repository.SummaryNoteRepository;
@@ -17,21 +15,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class LearningDataService {
 
-    private final PdfDocumentRepository pdfDocumentRepository;
     private final SummaryNoteRepository summaryNoteRepository;
     private final ReverseLearningLogRepository reverseLearningLogRepository;
     private final StudyMemoRepository studyMemoRepository;
 
-    public PdfDocument savePdf(String fileName, String extractedText) {
-        PdfDocument pdf = new PdfDocument();
-        pdf.setFileName(fileName);
-        pdf.setExtractedText(extractedText);
-        return pdfDocumentRepository.save(pdf);
-    }
-
-    public SummaryNote saveSummary(String userId, Long pdfId, String summary, String quizQuestion, String quizAnswer) {
+    public SummaryNote saveSummary(String userId, String summary, String quizQuestion, String quizAnswer) {
         SummaryNote note = new SummaryNote();
-        note.setPdfId(pdfId);
         note.setSummary(summary);
         note.setPageNumber(1);
         note.setUserId(userId);

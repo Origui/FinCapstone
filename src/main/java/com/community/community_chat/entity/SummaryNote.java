@@ -15,8 +15,6 @@ public class SummaryNote {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long pdfId;
-
     @Lob
     @Column(columnDefinition = "CLOB")
     private String summary;

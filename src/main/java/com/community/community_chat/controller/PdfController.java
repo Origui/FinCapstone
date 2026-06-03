@@ -1,7 +1,6 @@
 package com.community.community_chat.controller;
 
 import com.community.community_chat.dto.StudyMemoRequest;
-import com.community.community_chat.entity.PdfDocument;
 import com.community.community_chat.entity.ReverseLearningLog;
 import com.community.community_chat.entity.StudyMemo;
 import com.community.community_chat.entity.SummaryNote;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -93,36 +91,6 @@ public class PdfController {
         return ResponseEntity.ok(result);
     }
 
-    @PostMapping("/upload-summary")
-    public ResponseEntity<Map<String, Object>> uploadAndSummarize(
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
-            @RequestParam("file") MultipartFile file) throws Exception {
-        String text;
-        try {
-            text = pdfService.extractText(file);
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> error = new LinkedHashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-        }
-        PdfDocument pdf = learningDataService.savePdf(file.getOriginalFilename(), text);
-        String summary = summaryService.summarize(text);
-        Map<String, Object> quiz = summaryService.generateBlankQuiz(summary);
-
-        String question = (String) quiz.get("question");
-        String answer = (String) quiz.get("answer");
-        SummaryNote note = learningDataService.saveSummary(userId, pdf.getId(), summary, question, answer);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("pdfId", pdf.getId());
-        result.put("summaryId", note.getId());
-        result.put("summary", summary);
-        result.put("question", question);
-        result.put("answer", answer);
-
-        return ResponseEntity.ok(result);
-    }
-
     @PostMapping("/quiz")
     public ResponseEntity<Map<String, Object>> generateQuiz(@RequestBody String text) {
         try {
@@ -178,7 +146,6 @@ public class PdfController {
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestBody Map<String, String> request) {
 
-        Long pdfId = parseOptionalLong(request.get("pdfId"));
         String summary = request.get("summary");
         String question = request.get("question");
         String answer = request.get("answer");
@@ -188,7 +155,7 @@ public class PdfController {
         }
 
         // DB에 최초 Insert 실행
-        SummaryNote note = learningDataService.saveSummary(userId, pdfId, summary, question, answer);
+        SummaryNote note = learningDataService.saveSummary(userId, summary, question, answer);
 
         // 🌟 [수정] 문자열 대신 저장된 엔티티(객체)를 그대로 리턴하여 JSON 형태로 ID를 전달합니다.
         return ResponseEntity.ok(note);

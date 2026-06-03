@@ -44,7 +44,6 @@ function requireLoginForSave() {
 
 const pdfApi = {
   upload: '/api/pdf/upload',
-  uploadSummary: '/api/pdf/upload-summary',
   summary: '/api/pdf/summary',
   quiz: '/api/pdf/quiz',
   saveQuestion: '/api/pdf/save-question',
@@ -560,16 +559,13 @@ async function saveStudyMemo() {
 
   const currentSummaryId = pdfState.summaryId || 0;
 
-  // 🛑 [수정 포인트] 아직 요약 저장을 안 해서 ID가 없다면 무조건 로컬로 우회
+  // 🛑 [변경] 임시저장 로직을 완전히 없애고 경고 메시지 후 리턴 처리
   if (currentSummaryId === 0 || currentSummaryId === "0") {
-    saveLocalMemo(content, 0); 
-    input.value = '';
-    renderStudyMemos(getLocalMemos());
-    showToast('요약본을 저장하기 전이라 메모를 브라우저에 임시 저장했습니다. [요약 저장]을 눌러주세요!', 'WARN');
+    showToast('먼저 상단의 [요약 저장] 버튼을 눌러 보관함에 추가한 후 메모를 작성할 수 있습니다.', 'WARN');
     return;
   }
 
-  // 요약본 ID가 존재할 때만 정상적으로 서버 통신
+  // 요약본 ID가 진짜 존재할 때만 정상적으로 서버(DB) 통신
   const memo = {
     summaryId: String(currentSummaryId),
     memoContent: content
@@ -586,20 +582,30 @@ async function saveStudyMemo() {
     });
     if (!response.ok) throw new Error(await response.text());
     input.value = '';
-    showToast('학습 메모를 저장했습니다.');
-    await loadStudyMemos();
+    showToast('학습 메모를 저장했습니다. ✅');
+    await loadStudyMemos(); // 등록 성공 후 서버 데이터 다시 로드
   } catch (error) {
-    console.warn('Memo API failed. Saving locally.', error);
-    saveLocalMemo(content, currentSummaryId); 
-    input.value = '';
-    renderStudyMemos(getLocalMemos());
-    showToast('메모를 브라우저에 임시 저장했습니다.', 'WARN');
+    console.error(error);
+    showToast('메모 저장에 실패했습니다: ' + error.message, 'WARN');
   }
 }
 
 async function loadStudyMemos() {
+  const list = document.getElementById('studyMemoList');
+  
+  // 🛑 summaryId가 없거나 0일 때는 조회를 취소하고 안내 문구 출력
+  if (!pdfState.summaryId || pdfState.summaryId === 0 || pdfState.summaryId === "0") {
+    if (list) {
+      list.innerHTML = `
+        <div style="text-align:center; padding:20px; color:var(--text3); font-size:13.5px;">
+          요약본을 저장한 후 학습 메모를 작성하고 확인할 수 있습니다.
+        </div>
+      `;
+    }
+    return; 
+  }
+
   try {
-    // 현재 로그인된 유저의 ID 추출 (우선순위: 함수형 식별 -> 객체형 식별 -> guest)
     let currentId = 'guest';
     if (typeof window.getCurrentUserId === 'function' && window.getCurrentUserId()) {
       currentId = window.getCurrentUserId();
@@ -607,7 +613,8 @@ async function loadStudyMemos() {
       currentId = window.currentUser.id;
     }
 
-    const response = await fetch(pdfApi.memoList(pdfState.summaryId || 0), {
+    // 오직 실제 DB 일련번호가 존재할 때만 서버에 메모 데이터를 요청함
+    const response = await fetch(pdfApi.memoList(pdfState.summaryId), {
       headers: {
         'X-User-Id': String(currentId)
       }
@@ -616,7 +623,9 @@ async function loadStudyMemos() {
     const memos = await response.json();
     renderStudyMemos(Array.isArray(memos) ? memos : []);
   } catch (error) {
-    renderStudyMemos(getLocalMemos());
+    console.error(error);
+    // 🛑 임시저장을 없앴으므로 에러 시 getLocalMemos 로컬 백업 로직을 태우지 않고 빈 배열 처리합니다.
+    renderStudyMemos([]);
   }
 }
 
@@ -658,29 +667,36 @@ function renderStudyMemos(memos) {
   let currentId = null;
   if (typeof window.getCurrentUserId === 'function') {
     currentId = window.getCurrentUserId();
+  } else if (typeof window.currentUser !== 'undefined' && window.currentUser?.id) {
+    currentId = window.currentUser.id;
   } else if (typeof currentUser !== 'undefined' && currentUser?.id) {
     currentId = currentUser.id;
   } else {
     currentId = sessionStorage.getItem("userId") || localStorage.getItem("userId");
   }
 
-  if (!currentUser) {
-    // ⚠️ 기존 코드의 memoList.innerHTML를 상단 변수인 list.innerHTML로 수정
+  if (!currentId || currentId === 'guest') {
     list.innerHTML = `
-      <div style="text-align:center; padding:20px; color:var(--text3);">
+      <div style="text-align:center; padding:20px; color:var(--text3); font-size:13.5px;">
         로그인 후 학습 메모를 확인할 수 있습니다.
       </div>
     `;
     return;
   }
   
-  // memos가 아예 없거나(undefined/null), 혹은 빈 배열([])일 때 모두 대응합니다.
-  if (!memos || memos.length === 0) {
+  // 🛑 0번 임시 아이디 데이터는 완벽히 거부하고 진짜 매핑된 데이터만 필터링
+  const currentSummaryId = String(pdfState.summaryId || 0);
+  const validMemos = (memos || []).filter(memo => {
+    return memo && memo.summaryId !== 0 && memo.summaryId !== "0" && String(memo.summaryId) === currentSummaryId;
+  });
+
+  if (!validMemos || validMemos.length === 0) {
     list.textContent = '저장된 메모가 아직 없습니다.';
     return;
   }
 
-  list.innerHTML = memos.map(memo => `
+  // 이제 임시저장 라벨링 없이 정상적인 리스트만 렌더링
+  list.innerHTML = validMemos.map(memo => `
     <div class="memo-item">
       <div>${escapePdfHtml(memo.memoContent || '')}</div>
       <span class="memo-date">${formatMemoDate(memo.createdAt)}</span>
@@ -784,7 +800,6 @@ async function saveSummary(){
 
   try{
     const data={
-      pdfId: "0", 
       summary: pdfState.summaryText,
       question: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0 ? pdfState.blanks[0].question : "",
       answer: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0 ? pdfState.blanks[0].keyword : ""
