@@ -40,6 +40,8 @@ async function loadSavedSummaryToStudyPage(noteId) {
 function openSummaryDetailModal(note) {
   let modal = document.getElementById('summaryDetailModal');
 
+  const summaryId = note.id || note.summaryId || 0;
+
   if (!modal) {
     modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -63,6 +65,26 @@ function openSummaryDetailModal(note) {
           </div>
         </div>
 
+        <hr style="border:0; border-top:1px dashed var(--border); margin:24px 0;">
+        
+        <div>
+          <h3 style="font-size:16px; font-weight:800; margin-bottom:10px; color:var(--text);">
+            📝 이 요약본의 학습 메모
+          </h3>
+          
+          <div id="mypage-memo-list" style="margin-bottom:15px; max-height:200px; overflow-y:auto; font-size:13px; color:var(--text2);">
+            로딩 중...
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <textarea id="mypageMemoInput" placeholder="이 요약 노트에 대한 추가 메모를 남겨보세요." 
+              style="flex:1; height:54px; padding:10px; border-radius:6px; background:var(--bg1); color:var(--text1); border:1px solid var(--border); resize:none; font-size:13px;"></textarea>
+            <button class="btn-secondary" id="mypageMemoSubmitBtn" style="padding:0 16px; font-size:13px; white-space:nowrap;">
+              등록
+            </button>
+          </div>
+        </div>
+
         <div style="display:flex; justify-content:flex-end; margin-top:24px;">
           <button class="btn-outline" onclick="closeSummaryDetailModal()">
             닫기
@@ -80,6 +102,8 @@ function openSummaryDetailModal(note) {
     document.body.appendChild(modal);
   }
 
+  modal.setAttribute('data-summary-id', summaryId);
+
   const savedAt = note.createdAt || note.cratedAt;
   const dateStr = savedAt ? String(savedAt).split('T')[0] : '확인 불가';
 
@@ -89,7 +113,103 @@ function openSummaryDetailModal(note) {
   document.getElementById('summary-detail-content').textContent =
     note.summary || '저장된 요약 내용이 없습니다.';
 
+  const submitBtn = document.getElementById('mypageMemoSubmitBtn');
+  submitBtn.onclick = () => saveMypageStudyMemo(summaryId);
+
   modal.classList.add('open');
+
+  loadMypageStudyMemos(summaryId);
+}
+
+async function loadMypageStudyMemos(summaryId) {
+  const listContainer = document.getElementById('mypage-memo-list');
+  if (!listContainer) return;
+
+  let currentId = 'guest';
+  const savedUser = JSON.parse(localStorage.getItem("currentUser"));
+  if (savedUser && savedUser.id) currentId = savedUser.id;
+  else currentId = sessionStorage.getItem("userId") || localStorage.getItem("userId") || "guest";
+
+  try {
+    // pdf-study.js의 api 규격과 동일하게 호출 (/api/pdf/memo/{summaryId})
+    const response = await fetch(`/api/pdf/memo/${summaryId}`, {
+      headers: { 'X-User-Id': String(currentId) }
+    });
+    
+    if (!response.ok) throw new Error('메모 로드 실패');
+    
+    const memos = await response.json();
+    
+    if (!memos || memos.length === 0) {
+      listContainer.innerHTML = `<div style="color:var(--text3); padding:10px 0;">작성된 학습 메모가 없습니다.</div>`;
+      return;
+    }
+
+    listContainer.innerHTML = memos.map(memo => {
+      const date = memo.createdAt ? new Date(memo.createdAt).toLocaleString() : '방금 전';
+      return `
+        <div style="background:var(--bg1); padding:10px; border-radius:6px; margin-bottom:8px; border:1px solid var(--border);">
+          <div style="word-break:break-all; line-height:1.4;">${localEscapeHtml(memo.memoContent || '')}</div>
+          <div style="font-size:11px; color:var(--text3); margin-top:4px; text-align:right;">📅 ${date}</div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error(error);
+    listContainer.innerHTML = `<div style="color:red; font-size:12px;">메모를 불러오지 못했습니다.</div>`;
+  }
+}
+
+// 💡 [추가] 마이페이지 모달 내에서 새로운 메모를 작성 및 저장하는 함수
+async function saveMypageStudyMemo(summaryId) {
+  const input = document.getElementById('mypageMemoInput');
+  const content = input.value.trim();
+  
+  if (!content) {
+    if (typeof showToast === 'function') showToast('메모 내용을 입력해주세요.', 'WARN');
+    else alert('메모 내용을 입력해주세요.');
+    return;
+  }
+
+  // 로그인 유저 식별자 확보
+  let userId = sessionStorage.getItem("userId") || localStorage.getItem("userId");
+  const savedUser = JSON.parse(localStorage.getItem("currentUser"));
+  if (savedUser && savedUser.id) userId = savedUser.id;
+
+  if (!userId || userId === 'guest') {
+    if (typeof showToast === 'function') showToast('로그인 후 메모를 저장할 수 있습니다.', 'WARN');
+    else alert('로그인 후 이용 가능합니다.');
+    return;
+  }
+
+  const payload = {
+    summaryId: String(summaryId),
+    memoContent: content
+  };
+
+  try {
+    const response = await fetch('/api/pdf/memo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'X-User-Id': String(userId)
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+
+    input.value = '';
+    if (typeof showToast === 'function') showToast('학습 메모를 추가했습니다. ✅');
+    
+    // 등록 성공 후 메모 목록 새로고침
+    loadMypageStudyMemos(summaryId);
+
+  } catch (error) {
+    console.error(error);
+    if (typeof showToast === 'function') showToast('메모 저장 실패 ❌', 'WARN');
+  }
 }
 
 function closeSummaryDetailModal() {

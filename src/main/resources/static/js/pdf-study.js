@@ -245,13 +245,46 @@ async function generatePdfSummary() {
 
   try {
     showToast('AI 요약을 생성하는 중입니다...');
-    summaryText = await postText(pdfApi.summary, text);
+    
+    // 유저 ID 추출
+    let currentUserId = 'guest';
+    if (typeof window.getCurrentUserId === 'function' && window.getCurrentUserId()) {
+      currentUserId = window.getCurrentUserId();
+    } else if (typeof window.currentUser !== 'undefined' && window.currentUser?.id) {
+      currentUserId = window.currentUser.id;
+    } else {
+      currentUserId = sessionStorage.getItem("userId") || localStorage.getItem("userId") || 'guest';
+    }
+
+    // [변경] 백엔드에 요약을 요청하되, 여기서는 DB 저장을 안 하거나 text만 받는 구조로 작동해야 함
+    const response = await fetch(pdfApi.summary, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'X-User-Id': String(currentUserId)
+      },
+      body: JSON.stringify({ 
+        text: text,
+        subject: pdfState.subject || "운영체제"
+      })
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+    
+    const result = await response.json(); 
+    
+    // 🛑 [수정 포인트] 여기서 미리 summaryId를 고정하지 않습니다. (아직 저장을 안 했으므로 0)
+    pdfState.summaryId = 0; 
+    summaryText = result.summary || result.text || ''; // 백엔드가 텍스트만 주든 객체를 주든 받음
+
   } catch (error) {
     console.warn('Summary API failed. Falling back to local summary.', error);
     summaryText = buildLocalSummary(text).join('\n');
+    pdfState.summaryId = 0;
     showToast('요약 API 연결이 어려워 로컬 요약을 표시합니다.', 'WARN');
   }
 
+  // 이후 화면 렌더링 로직은 동일
   pdfState.summaryText = cleanSummaryMarkdown(summaryText);
   pdfState.summaryItems = buildLocalSummary(pdfState.summaryText || text);
   if (!pdfState.summaryItems.length && summaryText) {
@@ -259,6 +292,7 @@ async function generatePdfSummary() {
   }
   pdfState.keywords = extractKeywords(`${text} ${pdfState.summaryText}`);
   pdfState.subject = inferPdfSubject(`${text} ${pdfState.summaryText}`);
+  
   if (!isAllowedPdfSubject(pdfState.subject)) {
     showToast(buildBlockedPdfSubjectMessage(pdfState.subject), 'WARN');
     return;
@@ -276,7 +310,7 @@ async function generatePdfSummary() {
     </ul>
   `;
 
-  showToast('번호가 붙은 요약을 생성했습니다.');
+  showToast('번호가 붙은 요약을 생성했습니다. 저장하려면 [요약 저장]을 누르세요.');
 }
 
 function cleanSummaryMarkdown(text) {
@@ -517,14 +551,27 @@ async function saveStudyMemo() {
   const input = document.getElementById('studyMemoInput');
   const userId = requireLoginForSave();
   if(!userId) return;
+  
   const content = input.value.trim();
   if (!content) {
     showToast('메모 내용을 먼저 입력해주세요.', 'WARN');
     return;
   }
 
+  const currentSummaryId = pdfState.summaryId || 0;
+
+  // 🛑 [수정 포인트] 아직 요약 저장을 안 해서 ID가 없다면 무조건 로컬로 우회
+  if (currentSummaryId === 0 || currentSummaryId === "0") {
+    saveLocalMemo(content, 0); 
+    input.value = '';
+    renderStudyMemos(getLocalMemos());
+    showToast('요약본을 저장하기 전이라 메모를 브라우저에 임시 저장했습니다. [요약 저장]을 눌러주세요!', 'WARN');
+    return;
+  }
+
+  // 요약본 ID가 존재할 때만 정상적으로 서버 통신
   const memo = {
-    summaryId: String(pdfState.summaryId || 0),
+    summaryId: String(currentSummaryId),
     memoContent: content
   };
 
@@ -543,7 +590,7 @@ async function saveStudyMemo() {
     await loadStudyMemos();
   } catch (error) {
     console.warn('Memo API failed. Saving locally.', error);
-    saveLocalMemo(content);
+    saveLocalMemo(content, currentSummaryId); 
     input.value = '';
     renderStudyMemos(getLocalMemos());
     showToast('메모를 브라우저에 임시 저장했습니다.', 'WARN');
@@ -573,10 +620,12 @@ async function loadStudyMemos() {
   }
 }
 
-function saveLocalMemo(content) {
+// 💡 summaryId 파라미터 추가
+function saveLocalMemo(content, summaryId) {
   const memos = getLocalMemos();
   memos.unshift({
     id: Date.now(),
+    summaryId: summaryId ? Number(summaryId) : 0,// 타입을 맞춰서 저장
     memoContent: content,
     createdAt: new Date().toISOString()
   });
@@ -725,9 +774,8 @@ function escapePdfHtml(value) {
 }
 
 async function saveSummary(){
-  // 1. [추가] 로그인 상태를 먼저 검증하고 유저 ID를 가져옵니다.
   const userId = requireLoginForSave();
-  if (!userId) return; // 로그인이 안 되어 있으면 여기서 중단 (로그인 창 표시)
+  if (!userId) return; 
 
   if(!pdfState.summaryText || pdfState.summaryText.trim() === ""){
     showToast("먼저 요약을 생성하세요.", "WARN");
@@ -736,34 +784,38 @@ async function saveSummary(){
 
   try{
     const data={
-      pdfId: String(pdfState.summaryId||0),
+      pdfId: "0", 
       summary: pdfState.summaryText,
-      question: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0? pdfState.blanks[0].question: "",
-      answer: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0? pdfState.blanks[0].keyword: ""
+      question: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0 ? pdfState.blanks[0].question : "",
+      answer: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0 ? pdfState.blanks[0].keyword : ""
     };
 
     const response = await fetch("/api/pdf/save-summary", {
       method: 'POST',
       headers: {
         "Content-Type": "application/json",
-        // 2. [추가] 서버가 누구의 요약본인지 알 수 있도록 헤더에 유저 ID를 넣어줍니다.
         "X-User-Id": userId 
       },
       body: JSON.stringify(data)
     });
-    // 🌟 중요: 백엔드가 저장 후 저장된 객체(JSON)를 주는지, 단순 텍스트를 주는지 확인해야 합니다.
-    // 만약 백엔드가 저장된 SummaryNote 엔티티를 JSON으로 반환한다면 아래와 같이 파싱합니다.
-    const result = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(resultText);
+      throw new Error("서버 저장 실패");
     }
 
+    // 🌟 백엔드가 이제 String 대신 SummaryNote 객체(JSON)를 주므로 정상 파싱 가능합니다.
+    const result = await response.json().catch(() => null);
+
     if (result && (result.id || result.summaryId)) {
+      // 서버가 발급해 준 진짜 고유 DB ID를 드디어 할당!
       pdfState.summaryId = result.id || result.summaryId;
-      console.log("DB에 저장된 진짜 요약 ID 고정 완료:", pdfState.summaryId);
+      console.log("DB 최초 저장 완료! 고정된 요약 ID:", pdfState.summaryId);
     }
-    showToast("요약 저장 완료 ✅");
+    
+    showToast("요약본이 보관함에 최종 저장되었습니다! ✅");
+    
+    // 요약 저장이 완료되었으니, 이 ID에 종속된 서버 메모를 불러옵니다.
+    await loadStudyMemos();
   }
   catch(error){
     console.error(error);
@@ -772,34 +824,34 @@ async function saveSummary(){
 }
 
 async function saveGeneratedQuestion(question) {
-  // 1. [수정] 로그인 상태를 검증하고 유저 ID를 가져옵니다. (비로그인 시 guest 저장 방지)
   const userId = requireLoginForSave();
   if (!userId) return; 
 
+  // 🛑 [가드 코드 추가] 요약이 먼저 저장되어야만 문제를 매핑할 수 있습니다.
+  if (!pdfState.summaryId || pdfState.summaryId === 0 || pdfState.summaryId === "0") {
+    console.log("요약본이 아직 저장되지 않아 문제 자동 저장을 대기합니다.");
+    return; // 사용자가 '요약 저장'을 누를 때 문제도 같이 가므로 여기서 먼저 보낼 필요 없음
+  }
+
   try {
-    // 2. [수정] postJson 대신 직접 fetch를 사용하여 헤더에 X-User-Id를 넣어줍니다.
     const response = await fetch(pdfApi.saveQuestion, {
       method: 'POST',
       headers: {
         "Content-Type": "application/json;charset=UTF-8",
-        "X-User-Id": userId // 🌟 여기에 유저 ID가 들어가야 서버에서 guest로 안 보냅니다!
+        "X-User-Id": userId
       },
       body: JSON.stringify({
-        summaryId: String(pdfState.summaryId || 0),
+        summaryId: String(pdfState.summaryId),
         question: question.question,
         answer: question.keyword,
         questionType: "blank"
       })
     });
 
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
+    if (!response.ok) throw new Error(await response.text());
     showToast("문제가 DB에 저장되었습니다 ✅");
   } catch(error) {
     console.error(error);
-    showToast("문제 저장 실패 ❌", "WARN");
   }
 }
 

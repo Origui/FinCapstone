@@ -1,5 +1,6 @@
 package com.community.community_chat.controller;
 
+import com.community.community_chat.dto.StudyMemoRequest;
 import com.community.community_chat.entity.PdfDocument;
 import com.community.community_chat.entity.ReverseLearningLog;
 import com.community.community_chat.entity.StudyMemo;
@@ -62,8 +63,34 @@ public class PdfController {
     }
 
     @PostMapping("/summary")
-    public ResponseEntity<String> summarize(@RequestBody String text) {
-        return ResponseEntity.ok(summaryService.summarize(text));
+    public ResponseEntity<Map<String, Object>> summarize(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestBody Map<String, String> request) throws Exception {
+
+        String text = request.get("text");
+        if (text == null || text.isBlank()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", "텍스트 내용이 없습니다.");
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        // 1. AI 요약 생성
+        String summary = summaryService.summarize(text);
+
+        // 2. 빈칸 퀴즈 생성
+        Map<String, Object> quiz = summaryService.generateBlankQuiz(summary);
+        String question = (String) quiz.get("question");
+        String answer = (String) quiz.get("answer");
+
+        // 🛑 [수정] DB 저장 로직(saveSummary)을 삭제합니다.
+        // 요약 Id는 아직 저장되지 않았으므로 0으로 리턴합니다.
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("summaryId", 0);
+        result.put("summary", summary);
+        result.put("question", question);
+        result.put("answer", answer);
+
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/upload-summary")
@@ -147,8 +174,8 @@ public class PdfController {
     }
 
     @PostMapping("/save-summary")
-    public ResponseEntity<String> saveSummary(
-            @RequestHeader(value = "X-User-Id", required = false) String userId, // 헤더 수집
+    public ResponseEntity<SummaryNote> saveSummary(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestBody Map<String, String> request) {
 
         Long pdfId = parseOptionalLong(request.get("pdfId"));
@@ -156,15 +183,15 @@ public class PdfController {
         String question = request.get("question");
         String answer = request.get("answer");
 
-        // 유저 아이디가 넘어오지 않은 경우 예외 방지용 기본값 처리
         if (userId == null || userId.isBlank()) {
             userId = "guest";
         }
 
-        // 🌟 중요: 서비스 메서드를 호출할 때 첫 번째 인자로 userId를 조립해서 넘겨줍니다!
+        // DB에 최초 Insert 실행
         SummaryNote note = learningDataService.saveSummary(userId, pdfId, summary, question, answer);
 
-        return ResponseEntity.ok("Summary saved with ID: " + note.getId());
+        // 🌟 [수정] 문자열 대신 저장된 엔티티(객체)를 그대로 리턴하여 JSON 형태로 ID를 전달합니다.
+        return ResponseEntity.ok(note);
     }
 
     @PostMapping("/save-question")
@@ -219,15 +246,17 @@ public class PdfController {
     @PostMapping("/memo")
     public ResponseEntity<StudyMemo> saveMemo(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody StudyMemoRequest requestDto) { // 💡 Map 대신 DTO 객체로 직접 수신
+
         if (isGuestUser(userId)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
+        // 💡 서비스 메서드 호출 시 subject(과목)도 함께 넘겨줍니다.
         StudyMemo memo = learningDataService.saveMemo(
                 userId,
-                parseOptionalLong(request.get("summaryId")),
-                request.get("memoContent"));
+                parseOptionalLong(requestDto.getSummaryId()),
+                requestDto.getMemoContent());
 
         return ResponseEntity.ok(memo);
     }
@@ -240,10 +269,14 @@ public class PdfController {
     }
 
     private Long parseOptionalLong(String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.isBlank() || value.equals("0")) { // 💡 "0"도 안전하게 0L로 처리하도록 보완
             return 0L;
         }
-        return Long.parseLong(value);
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     private boolean isGuestUser(String userId) {
