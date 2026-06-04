@@ -104,7 +104,7 @@ function openSummaryDetailModal(note) {
 
   modal.setAttribute('data-summary-id', summaryId);
 
-  const savedAt = note.createdAt || note.cratedAt;
+  const savedAt = note.cratedAt || note.cratedAt;
   const dateStr = savedAt ? String(savedAt).split('T')[0] : '확인 불가';
 
   document.getElementById('summary-detail-meta').textContent =
@@ -146,11 +146,23 @@ async function loadMypageStudyMemos(summaryId) {
     }
 
     listContainer.innerHTML = memos.map(memo => {
-      const date = memo.createdAt ? new Date(memo.createdAt).toLocaleString() : '방금 전';
+      const date = memo.createdAt && memo.createdAt.includes('T')
+        ? memo.createdAt.split('T')[0] 
+        : (memo.createdAt ? String(memo.createdAt).substring(0, 10) : '방금 전');
+      const memoId = memo.id;
       return `
-        <div style="background:var(--bg1); padding:10px; border-radius:6px; margin-bottom:8px; border:1px solid var(--border);">
-          <div style="word-break:break-all; line-height:1.4;">${localEscapeHtml(memo.memoContent || '')}</div>
-          <div style="font-size:11px; color:var(--text3); margin-top:4px; text-align:right;">📅 ${date}</div>
+        <div id="mypage-memo-item-${memoId}" style="background:var(--bg1); padding:10px; border-radius:6px; margin-bottom:8px; border:1px solid var(--border);">
+          <div class="memo-text-zone" style="word-break:break-all; line-height:1.4; font-size:13.5px; color:var(--text1);">
+            ${localEscapeHtml(memo.memoContent || '')}
+          </div>
+          
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text3); margin-top:6px;">
+            <div class="memo-btn-zone">
+              <button onclick="editMypageStudyMemo(${memoId}, ${summaryId})" style="background:none; border:none; color:var(--text3); cursor:pointer; padding:0 4px; text-decoration:underline;">수정</button>
+              <button onclick="deleteMypageStudyMemo(${memoId}, ${summaryId})" style="background:none; border:none; color:#f87171; cursor:pointer; padding:0 4px; text-decoration:underline;">삭제</button>
+            </div>
+            <div>📅 ${date}</div>
+          </div>
         </div>
       `;
     }).join('');
@@ -209,6 +221,100 @@ async function saveMypageStudyMemo(summaryId) {
   } catch (error) {
     console.error(error);
     if (typeof showToast === 'function') showToast('메모 저장 실패 ❌', 'WARN');
+  }
+}
+
+async function editMypageStudyMemo(memoId, summaryId) {
+  const itemDiv = document.getElementById(`mypage-memo-item-${memoId}`);
+  if (!itemDiv) return;
+
+  const textZone = itemDiv.querySelector('.memo-text-zone');
+  const btnZone = itemDiv.querySelector('.memo-btn-zone');
+  
+  // 수정 전 원래 텍스트 추출 (HTML escape 복원 대신 raw text를 취하기 위해 임시 div 활용)
+  const currentText = textZone.innerText;
+
+  // 1. 해당 메모 아이템을 인라인 수정 textarea 폼으로 전환
+  textZone.innerHTML = `
+    <textarea class="edit-memo-input" style="width:100%; height:46px; padding:6px; border-radius:4px; background:var(--surface); color:var(--text); border:1px solid var(--accent); resize:none; font-size:13px; line-height:1.4;">${currentText}</textarea>
+  `;
+
+  // 2. 버튼 구성을 [저장], [취소]로 변경
+  btnZone.innerHTML = `
+    <button class="save-btn" style="background:none; border:none; color:var(--accent); font-weight:bold; cursor:pointer; padding:0 4px; text-decoration:underline;">저장</button>
+    <button class="cancel-btn" style="background:none; border:none; color:var(--text3); cursor:pointer; padding:0 4px; text-decoration:underline;">취소</button>
+  `;
+
+  // 취소 이벤트 바인딩 (목록 재렌더링으로 롤백)
+  btnZone.querySelector('.cancel-btn').onclick = () => loadMypageStudyMemos(summaryId);
+
+  // 저장 이벤트 바인딩
+  btnZone.querySelector('.save-btn').onclick = async () => {
+    const newContent = textZone.querySelector('.edit-memo-input').value.trim();
+    if (!newContent) {
+      alert('메모 내용을 입력해주세요.');
+      return;
+    }
+
+    let userId = sessionStorage.getItem("userId") || localStorage.getItem("userId");
+    const savedUser = JSON.parse(localStorage.getItem("currentUser"));
+    if (savedUser && savedUser.id) userId = savedUser.id;
+
+    try {
+      const response = await fetch('/api/pdf/memo/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json;charset=UTF-8',
+          'X-User-Id': String(userId)
+        },
+        body: JSON.stringify({
+          id: memoId,                // StudyMemoRequest의 Long id 매핑
+          memoContent: newContent
+        })
+      });
+
+      if (!response.ok) throw new Error(await response.text());
+
+      if (typeof showToast === 'function') showToast('메모가 수정되었습니다. ✨');
+      loadMypageStudyMemos(summaryId); // 수정 성공 후 새로고침
+
+    } catch (error) {
+      console.error(error);
+      if (typeof showToast === 'function') showToast('메모 수정 실패 ❌', 'WARN');
+      else alert('메모 수정에 실패했습니다.');
+    }
+  };
+}
+
+// 💡 [추가] 마이페이지 모달 내 메모 삭제 함수
+async function deleteMypageStudyMemo(memoId, summaryId) {
+  if (!confirm('이 학습 메모를 정말 삭제하시겠습니까?')) return;
+
+  let userId = sessionStorage.getItem("userId") || localStorage.getItem("userId");
+  const savedUser = JSON.parse(localStorage.getItem("currentUser"));
+  if (savedUser && savedUser.id) userId = savedUser.id;
+
+  try {
+    const response = await fetch('/api/pdf/memo/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'X-User-Id': String(userId)
+      },
+      body: JSON.stringify({
+        id: memoId // StudyMemoRequest의 Long id 매핑
+      })
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+
+    if (typeof showToast === 'function') showToast('메모가 삭제되었습니다. 🗑️');
+    loadMypageStudyMemos(summaryId); // 삭제 성공 후 목록 새로고침
+
+  } catch (error) {
+    console.error(error);
+    if (typeof showToast === 'function') showToast('메모 삭제 실패 ❌', 'WARN');
+    else alert('메모 삭제에 실패했습니다.');
   }
 }
 

@@ -235,6 +235,49 @@ public class PdfController {
         return ResponseEntity.ok(learningDataService.getMemos(userId, summaryId));
     }
 
+    @PostMapping("/memo/update")
+    public ResponseEntity<?> updateMemo(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestBody StudyMemoRequest requestDto) {
+
+        if (isGuestUser(userId)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            // 서비스 레이어의 updateMemo 메서드 호출
+            StudyMemo updatedMemo = learningDataService.updateMemo(
+                    userId,
+                    requestDto.getId(),
+                    requestDto.getMemoContent());
+            return ResponseEntity.ok(updatedMemo);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/memo/delete")
+    public ResponseEntity<?> deleteMemo(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestBody StudyMemoRequest requestDto) {
+
+        if (isGuestUser(userId)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            // 서비스 레이어의 deleteMemo 메서드 호출
+            learningDataService.deleteMemo(userId, requestDto.getId());
+            return ResponseEntity.ok().body("{\"message\":\"success\"}");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        }
+    }
+
     private Long parseOptionalLong(String value) {
         if (value == null || value.isBlank() || value.equals("0")) { // 💡 "0"도 안전하게 0L로 처리하도록 보완
             return 0L;

@@ -50,7 +50,9 @@ const pdfApi = {
   reverseQuestion: '/api/pdf/reverse-question',
   evaluateAnswer: '/api/pdf/evaluate-answer',
   memo: '/api/pdf/memo',
-  memoList: summaryId => `/api/pdf/memo/${summaryId || 0}`
+  memoList: summaryId => `/api/pdf/memo/${summaryId || 0}`,
+  updateMemo: '/api/pdf/memo/update',
+  deleteMemo: '/api/pdf/memo/delete'
 };
 
 const maxPdfFileSizeMb = 50;
@@ -629,6 +631,91 @@ async function loadStudyMemos() {
   }
 }
 
+async function updateStudyMemo(memoId) {
+  const userId = requireLoginForSave();
+  if (!userId) return;
+
+  const editInput = document.getElementById(`editMemoInput-${memoId}`);
+  const updatedContent = editInput.value.trim();
+
+  if (!updatedContent) {
+    showToast('수정할 내용을 입력해주세요.', 'WARN');
+    return;
+  }
+
+  try {
+    showToast('메모를 수정하는 중입니다...');
+    const response = await fetch(pdfApi.updateMemo, {
+      method: 'POST', // 💡 POST로 변경
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'X-User-Id': userId
+      },
+      body: JSON.stringify({ 
+        id: memoId, // 백엔드 엔티티의 ID 필드명과 맞춰주세요 (예: memoId 등)
+        memoContent: updatedContent 
+      })
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+
+    showToast('학습 메모가 수정되었습니다. ✅');
+    await loadStudyMemos(); 
+  } catch (error) {
+    console.error(error);
+    showToast('메모 수정에 실패했습니다: ' + error.message, 'WARN');
+  }
+}
+
+// 🌟 POST 방식으로 메모 삭제
+async function deleteStudyMemo(memoId) {
+  const userId = requireLoginForSave();
+  if (!userId) return;
+
+  if (!confirm('정말로 이 메모를 삭제하시겠습니까?')) return;
+
+  try {
+    showToast('메모를 삭제하는 중입니다...');
+    const response = await fetch(pdfApi.deleteMemo, {
+      method: 'POST', // 💡 POST로 변경
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'X-User-Id': userId
+      },
+      body: JSON.stringify({ 
+        id: memoId // 삭제할 메모의 ID 전송
+      })
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+
+    showToast('학습 메모가 삭제되었습니다. 🗑️');
+    await loadStudyMemos(); 
+  } catch (error) {
+    console.error(error);
+    showToast('메모 삭제에 실패했습니다: ' + error.message, 'WARN');
+  }
+}
+
+// 수정 폼 토글 헬퍼 함수
+function toggleEditForm(memoId) {
+  const displayDiv = document.getElementById(`memoDisplay-${memoId}`);
+  const editDiv = document.getElementById(`memoEditForm-${memoId}`);
+  
+  if (editDiv.style.display === 'none') {
+    editDiv.style.display = 'block';
+    displayDiv.style.display = 'none';
+  } else {
+    editDiv.style.display = 'none';
+    displayDiv.style.display = 'block';
+  }
+}
+
+// 전역 스코프 바인딩
+window.updateStudyMemo = updateStudyMemo;
+window.deleteStudyMemo = deleteStudyMemo;
+window.toggleEditForm = toggleEditForm;
+
 // 💡 summaryId 파라미터 추가
 function saveLocalMemo(content, summaryId) {
   const memos = getLocalMemos();
@@ -696,12 +783,34 @@ function renderStudyMemos(memos) {
   }
 
   // 이제 임시저장 라벨링 없이 정상적인 리스트만 렌더링
-  list.innerHTML = validMemos.map(memo => `
-    <div class="memo-item">
-      <div>${escapePdfHtml(memo.memoContent || '')}</div>
-      <span class="memo-date">${formatMemoDate(memo.createdAt)}</span>
-    </div>
-  `).join('');
+  list.innerHTML = validMemos.map(memo => {
+    const memoId = memo.id || memo.memoId; 
+    
+    return `
+      <div class="memo-item" id="memoItem-${memoId}" style="margin-bottom: 12px; padding: 10px; border-bottom: 1px solid var(--border);">
+        
+        <div id="memoDisplay-${memoId}">
+          <div class="memo-content" style="white-space: pre-wrap;">${escapePdfHtml(memo.memoContent || '')}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+            <span class="memo-date" style="font-size: 11px; color: var(--text3);">${formatMemoDate(memo.createdAt)}</span>
+            <div class="memo-actions">
+              <button class="btn-text" style="color: var(--text2); margin-right: 8px; cursor: pointer; background: none; border: none;" onclick="toggleEditForm(${memoId})">수정</button>
+              <button class="btn-text" style="color: var(--accent-warn, #ff4d4f); cursor: pointer; background: none; border: none;" onclick="deleteStudyMemo(${memoId})">삭제</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="memoEditForm-${memoId}" style="display: none; margin-top: 5px;">
+          <textarea id="editMemoInput-${memoId}" style="width: 100%; min-height: 60px; padding: 6px; box-sizing: border-box; resize: vertical;">${escapePdfHtml(memo.memoContent || '')}</textarea>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 5px;">
+            <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="toggleEditForm(${memoId})">취소</button>
+            <button class="btn-primary" style="font-size: 12px; padding: 4px 8px;" onclick="updateStudyMemo(${memoId})">저장</button>
+          </div>
+        </div>
+
+      </div>
+    `;
+  }).join('');
 }
 
 function formatMemoDate(value) {
