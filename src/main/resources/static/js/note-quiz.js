@@ -837,8 +837,7 @@ async function saveWrongQuizNote(q, userAnswerStr, correctAnswerStr) {
     optionsJson: q.type === 'mcq' ? JSON.stringify(q.options) : '[]',
     answerIdx: q.type === 'mcq' ? safeAnswerIdx : null,
     answerKeywordsJson: JSON.stringify(q.answerKeywords || buildAnswerKeywords(`${q.answer} ${q.explanation}`)),
-    debugSolved: false,
-    relapsed: false
+    debugSolved: false
   };
 
   let savedNote = note;

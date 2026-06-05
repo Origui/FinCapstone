@@ -13,7 +13,8 @@ public class QuizQuestion {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "question_id")
+    private Long questionId;
 
     private Long summaryId;
 

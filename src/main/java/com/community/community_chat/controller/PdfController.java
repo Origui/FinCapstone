@@ -43,9 +43,9 @@ public class PdfController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> uploadPdf(@RequestPart("file") MultipartFile file) throws IOException {
-        String extractedText;
+        PdfService.PdfExtractResult result;
         try {
-            extractedText = pdfService.extractText(file);
+            result = pdfService.extractTextWithVisuals(file);
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("message", e.getMessage());
@@ -54,8 +54,10 @@ public class PdfController {
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("fileName", file.getOriginalFilename());
-        response.put("textLength", extractedText.length());
-        response.put("text", extractedText);
+        response.put("textLength", result.text().length());
+        response.put("text", result.text());
+        response.put("visualPages", result.visualPages());
+        response.put("visualSummary", result.visualSummary());
 
         return ResponseEntity.ok(response);
     }
@@ -136,9 +138,9 @@ public class PdfController {
         return ResponseEntity.ok(mySummaries);
     }
 
-    @GetMapping("/summary/{id}")
-    public ResponseEntity<SummaryNote> getSummary(@PathVariable Long id) {
-        return ResponseEntity.ok(learningDataService.getSummary(id));
+    @GetMapping("/summary/{summaryId}")
+    public ResponseEntity<SummaryNote> getSummary(@PathVariable Long summaryId) {
+        return ResponseEntity.ok(learningDataService.getSummary(summaryId));
     }
 
     @PostMapping("/save-summary")
@@ -147,17 +149,19 @@ public class PdfController {
             @RequestBody Map<String, String> request) {
 
         String summary = request.get("summary");
-        String question = request.get("question");
-        String answer = request.get("answer");
+        String visualPagesJson = request.getOrDefault("visualPagesJson", "[]");
+        String visualSummary = request.getOrDefault("visualSummary", "");
 
         if (userId == null || userId.isBlank()) {
             userId = "guest";
         }
 
-        // DB에 최초 Insert 실행
-        SummaryNote note = learningDataService.saveSummary(userId, summary, question, answer);
+        SummaryNote note = learningDataService.saveSummary(
+                userId,
+                summary,
+                visualPagesJson,
+                visualSummary);
 
-        // 🌟 [수정] 문자열 대신 저장된 엔티티(객체)를 그대로 리턴하여 JSON 형태로 ID를 전달합니다.
         return ResponseEntity.ok(note);
     }
 
@@ -248,7 +252,7 @@ public class PdfController {
             // 서비스 레이어의 updateMemo 메서드 호출
             StudyMemo updatedMemo = learningDataService.updateMemo(
                     userId,
-                    requestDto.getId(),
+                    requestDto.getMemoId(),
                     requestDto.getMemoContent());
             return ResponseEntity.ok(updatedMemo);
         } catch (IllegalArgumentException e) {
@@ -269,7 +273,7 @@ public class PdfController {
 
         try {
             // 서비스 레이어의 deleteMemo 메서드 호출
-            learningDataService.deleteMemo(userId, requestDto.getId());
+            learningDataService.deleteMemo(userId, requestDto.getMemoId());
             return ResponseEntity.ok().body("{\"message\":\"success\"}");
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());

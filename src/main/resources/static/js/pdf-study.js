@@ -7,6 +7,8 @@ let pdfState = {
   summaryText: '',
   summaryItems: [],
   summaryRefs: [],
+  visualPages: [],
+  visualSummary: '',
   subject: '운영체제',
   keywords: [],
   blanks: [],
@@ -96,8 +98,14 @@ async function loadPdfTextFile(event) {
       }
 
       const extractedText = (data.text || '').trim();
-      if (!extractedText) {
-        throw new Error('PDF에서 텍스트를 추출하지 못했습니다. 이미지/스캔 PDF라면 OCR 처리가 필요합니다.');
+      const visualPages = Array.isArray(data.visualPages) ? data.visualPages : [];
+      const visualSummary = (data.visualSummary || '').trim();
+      console.log("visualPages count:", visualPages.length);
+      console.log("first visual src:", visualPages[0]?.slice(0, 80));
+      console.log("first visual length:", visualPages[0]?.length);
+
+      if (!extractedText && !visualPages.length) {
+        throw new Error('PDF에서 텍스트나 시각 자료를 추출하지 못했습니다.');
       }
 
       const detectedSubject = inferPdfSubject(extractedText);
@@ -108,8 +116,13 @@ async function loadPdfTextFile(event) {
 
       textarea.value = extractedText;
       pdfState.sourceText = extractedText;
+      pdfState.visualPages = visualPages;
+      pdfState.visualSummary = visualSummary;
       pdfState.subject = detectedSubject;
       pdfState.summaryId = 0;
+
+      renderPdfVisualMaterials();
+
       showToast(`${detectedSubject} PDF를 불러왔습니다. (${extractedText.length.toLocaleString()}자)`);
       return;
     } catch (error) {
@@ -129,6 +142,61 @@ async function loadPdfTextFile(event) {
   };
   reader.readAsText(file, 'utf-8');
   event.target.value = '';
+}
+
+function renderPdfVisualMaterials() {
+  const box = document.getElementById('pdfVisualMaterials');
+  if (!box) return;
+
+  const pages = pdfState.visualPages || [];
+
+  if (!pages.length) {
+    box.innerHTML = '';
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'block';
+
+  box.innerHTML = `
+    <div style="margin-bottom:18px;">
+      <div style="font-size:16px; font-weight:800; color:var(--text); margin-bottom:10px;">
+        시각 자료 원본
+      </div>
+
+      <div style="
+        border:1px solid var(--border);
+        border-radius:10px;
+        background:white;
+        padding:12px;
+        max-height:520px;
+        overflow:auto;
+      ">
+        ${pages.map((src, index) => `
+          <div style="
+            margin-bottom:14px;
+            padding:10px;
+            border:1px solid #dbeafe;
+            border-radius:8px;
+            background:#ffffff;
+          ">
+            <div style="font-size:13px; font-weight:700; color:var(--text2); margin-bottom:8px;">
+              시각 자료 ${index + 1}
+            </div>
+            <img src="${src}" alt="PDF 시각 자료 ${index + 1}"
+              style="
+                display:block;
+                width:100%;
+                max-height:360px;
+                object-fit:contain;
+                border-radius:6px;
+                background:white;
+              ">
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 async function readJsonOrText(response) {
@@ -257,7 +325,12 @@ async function generatePdfSummary() {
       currentUserId = sessionStorage.getItem("userId") || localStorage.getItem("userId") || 'guest';
     }
 
-    // [변경] 백엔드에 요약을 요청하되, 여기서는 DB 저장을 안 하거나 text만 받는 구조로 작동해야 함
+    const visualSummary = (pdfState.visualSummary || '').trim();
+    const summarySource = [
+      text,
+      visualSummary ? `[시각 자료 요약]\n${visualSummary}` : ''
+    ].filter(Boolean).join('\n\n');
+
     const response = await fetch(pdfApi.summary, {
       method: 'POST',
       headers: {
@@ -265,7 +338,7 @@ async function generatePdfSummary() {
         'X-User-Id': String(currentUserId)
       },
       body: JSON.stringify({ 
-        text: text,
+        text: summarySource,
         subject: pdfState.subject || "운영체제"
       })
     });
@@ -300,15 +373,52 @@ async function generatePdfSummary() {
   }
   pdfState.summaryRefs = buildSummaryRefs(pdfState.summaryItems, pdfState.keywords);
 
+  const currentVisualSummary = (pdfState.visualSummary || '').trim();
+
   document.getElementById('pdfSummaryOutput').innerHTML = `
-    <ul class="summary-list">
-      ${pdfState.summaryRefs.map(ref => `
-        <li>
-          <span class="summary-ref" title="${escapePdfHtml(ref.tooltip)}">${ref.number}</span>
-          <span>${highlightSummaryKeywords(ref.text, ref.keywords)}</span>
-        </li>
-      `).join('')}
-    </ul>
+    <div style="margin-bottom:18px;">
+      <div style="
+        font-size:14px;
+        font-weight:800;
+        color:var(--text);
+        margin-bottom:10px;
+      ">
+        텍스트 요약
+      </div>
+      <ul class="summary-list">
+        ${pdfState.summaryRefs.map(ref => `
+          <li>
+            <span class="summary-ref" title="${escapePdfHtml(ref.tooltip)}">${ref.number}</span>
+            <span>${highlightSummaryKeywords(ref.text, ref.keywords)}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+    ${currentVisualSummary ? `
+      <div style="
+        margin-top:18px;
+        padding-top:16px;
+        border-top:1px solid var(--border);
+      ">
+        <div style="
+          font-size:14px;
+          font-weight:800;
+          color:var(--text);
+          margin-bottom:10px;
+        ">
+          시각 자료 요약
+        </div>
+
+        <div style="
+          white-space:pre-wrap;
+          line-height:1.8;
+          font-size:14px;
+          color:var(--text2);
+        ">
+          ${escapePdfHtml(currentVisualSummary)}
+        </div>
+      </div>
+    ` : ''}
   `;
 
   showToast('번호가 붙은 요약을 생성했습니다. 저장하려면 [요약 저장]을 누르세요.');
@@ -439,8 +549,7 @@ async function savePdfBlankWrongNote(question, userAnswer) {
     optionsJson: '[]',
     answerIdx: null,
     answerKeywordsJson: JSON.stringify([question.keyword]),
-    debugSolved: false,
-    relapsed: false
+    debugSolved: false
   };
 
   const savedNote = await window.createNoteViaApi(note);
@@ -652,7 +761,7 @@ async function updateStudyMemo(memoId) {
         'X-User-Id': userId
       },
       body: JSON.stringify({ 
-        id: memoId, // 백엔드 엔티티의 ID 필드명과 맞춰주세요 (예: memoId 등)
+        memoId: memoId, // 백엔드 엔티티의 ID 필드명과 맞춰주세요 (예: memoId 등)
         memoContent: updatedContent 
       })
     });
@@ -683,7 +792,7 @@ async function deleteStudyMemo(memoId) {
         'X-User-Id': userId
       },
       body: JSON.stringify({ 
-        id: memoId // 삭제할 메모의 ID 전송
+        memoId: memoId // 삭제할 메모의 ID 전송
       })
     });
 
@@ -720,7 +829,7 @@ window.toggleEditForm = toggleEditForm;
 function saveLocalMemo(content, summaryId) {
   const memos = getLocalMemos();
   memos.unshift({
-    id: Date.now(),
+    memoId: Date.now(),
     summaryId: summaryId ? Number(summaryId) : 0,// 타입을 맞춰서 저장
     memoContent: content,
     createdAt: new Date().toISOString()
@@ -784,7 +893,7 @@ function renderStudyMemos(memos) {
 
   // 이제 임시저장 라벨링 없이 정상적인 리스트만 렌더링
   list.innerHTML = validMemos.map(memo => {
-    const memoId = memo.id || memo.memoId; 
+    const memoId = memo.memoId || memo.id; 
     
     return `
       <div class="memo-item" id="memoItem-${memoId}" style="margin-bottom: 12px; padding: 10px; border-bottom: 1px solid var(--border);">
@@ -910,8 +1019,8 @@ async function saveSummary(){
   try{
     const data={
       summary: pdfState.summaryText,
-      question: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0 ? pdfState.blanks[0].question : "",
-      answer: Array.isArray(pdfState.blanks) && pdfState.blanks.length > 0 ? pdfState.blanks[0].keyword : ""
+      visualPagesJson: JSON.stringify(pdfState.visualPages || []),
+      visualSummary: pdfState.visualSummary || ""
     };
 
     const response = await fetch("/api/pdf/save-summary", {

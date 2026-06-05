@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface WrongNoteRepository extends JpaRepository<WrongNote, Long> {
 
-    List<WrongNote> findAllByOrderByIdDesc();
+    List<WrongNote> findAllByOrderByWrongIdDesc();
 
-    List<WrongNote> findByUserIdOrderByIdDesc(String userId);
+    List<WrongNote> findByUserIdOrderByWrongIdDesc(String userId);
 }

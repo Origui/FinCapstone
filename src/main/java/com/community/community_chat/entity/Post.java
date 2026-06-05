@@ -38,9 +38,6 @@ public class Post {
     @Column(name = "report_count")
     private int reportCount = 0;
 
-    @Column(name = "is_deleted")
-    private boolean deleted = false;
-
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

@@ -13,12 +13,13 @@ public class StudyMemo {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "memo_id")
+    private Long memoId;
 
     private Long summaryId;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String memoContent;
 
     private String userId;

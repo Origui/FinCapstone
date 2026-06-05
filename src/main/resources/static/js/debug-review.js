@@ -13,7 +13,6 @@ window.injectAllModals = function() {
     .cyber-textarea::placeholder { color:rgba(223,255,234,0.58); }
     .cyber-btn { background:transparent; color:#ff8f98; border:1px solid #ff6b75; cursor:pointer; transition:0.3s; margin-top:15px; width:100%; padding:12px; font-weight:800; border-radius:8px; }
     .cyber-btn:hover { background:#ff5a66; color:#fff; box-shadow:0 0 15px rgba(255,90,102,0.45); }
-    .cyber-btn.relapsed { border-color:#d946ef; color:#f0abfc; }
     .cyber-btn-solved { background:transparent; color:#7dffb0; border:1px solid #1ecf73; cursor:pointer; transition:0.3s; margin-top:15px; width:100%; padding:12px; font-weight:800; border-radius:8px; }
     .cyber-btn-solved:hover { background:#1ecf73; color:#04140a; box-shadow:0 0 15px rgba(30,207,115,0.45); }
     .cyber-btn-cooldown { background:transparent; color:#94a3b8; border:1px dashed #94a3b8; cursor:not-allowed; margin-top:15px; width:100%; padding:12px; font-weight:800; border-radius:8px; }
@@ -288,7 +287,6 @@ function finishDebugReview(success, correctConcept, hint) {
     if (success) {
       window.currentBugData.debugSolved = true;
       window.currentBugData.cooldownUntil = null;
-      window.currentBugData.relapsed = false;
       modalContent.classList.add('hacker-mode-success');
     } else {
       window.currentBugData.cooldownUntil = Date.now() + 30 * 1000;
@@ -360,13 +358,13 @@ window.addCyberButtonsToCards = function() {
     const cardText = card.innerText.replace(/\s+/g, '');
 
     const noteData = activeNotes.find(note => {
-      if (note.id && usedIds.has(note.id)) return false;
+      if (note.wrongId && usedIds.has(note.wrongId)) return false;
       const questionText = note.q ? note.q.replace(/\s+/g, '') : '';
       return (questionText && cardText.includes(questionText)) || titleEl.innerText.includes(note.title);
     });
     if (!noteData) return;
 
-    usedIds.add(noteData.id);
+    usedIds.add(noteData.wrongId);
 
     if (noteData.debugSolved) {
       btn.className = 'cyber-btn-solved';
@@ -378,7 +376,7 @@ window.addCyberButtonsToCards = function() {
       const secs = Math.floor((remaining % 60000) / 1000);
       btn.textContent = `복습 잠금 ${mins}:${secs.toString().padStart(2, '0')}`;
     } else {
-      btn.className = noteData.relapsed ? 'cyber-btn relapsed' : 'cyber-btn';
+      btn.className = 'cyber-btn';
       btn.textContent = isBlankNote(noteData)
         ? '빈칸 다시 풀기'
         : isEssayNote(noteData)

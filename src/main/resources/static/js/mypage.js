@@ -20,9 +20,9 @@ function switchMyPageTab(tabId, element) {
   renderMyPageMockData(tabId);
 }
 
-async function loadSavedSummaryToStudyPage(noteId) {
+async function loadSavedSummaryToStudyPage(summaryId) {
   try {
-    const response = await fetch(`/api/pdf/summary/${noteId}`);
+    const response = await fetch(`/api/pdf/summary/${summaryId}`);
 
     if (!response.ok) {
       throw new Error('요약 노트를 불러오지 못했습니다.');
@@ -40,7 +40,7 @@ async function loadSavedSummaryToStudyPage(noteId) {
 function openSummaryDetailModal(note) {
   let modal = document.getElementById('summaryDetailModal');
 
-  const summaryId = note.id || note.summaryId || 0;
+  const summaryId = note.summaryId || note.id || 0;
 
   if (!modal) {
     modal = document.createElement('div');
@@ -108,7 +108,7 @@ function openSummaryDetailModal(note) {
   const dateStr = savedAt ? String(savedAt).split('T')[0] : '확인 불가';
 
   document.getElementById('summary-detail-meta').textContent =
-    `요약 노트 #${note.id} · 저장일 ${dateStr}`;
+    `요약 노트 #${note.summaryId} · 저장일 ${dateStr}`;
 
   document.getElementById('summary-detail-content').textContent =
     note.summary || '저장된 요약 내용이 없습니다.';
@@ -149,7 +149,7 @@ async function loadMypageStudyMemos(summaryId) {
       const date = memo.createdAt && memo.createdAt.includes('T')
         ? memo.createdAt.split('T')[0] 
         : (memo.createdAt ? String(memo.createdAt).substring(0, 10) : '방금 전');
-      const memoId = memo.id;
+      const memoId = memo.memoId || memo.id;
       return `
         <div id="mypage-memo-item-${memoId}" style="background:var(--bg1); padding:10px; border-radius:6px; margin-bottom:8px; border:1px solid var(--border);">
           <div class="memo-text-zone" style="word-break:break-all; line-height:1.4; font-size:13.5px; color:var(--text1);">
@@ -268,7 +268,7 @@ async function editMypageStudyMemo(memoId, summaryId) {
           'X-User-Id': String(userId)
         },
         body: JSON.stringify({
-          id: memoId,                // StudyMemoRequest의 Long id 매핑
+          memoId: memoId,               // StudyMemoRequest의 Long id 매핑
           memoContent: newContent
         })
       });
@@ -302,7 +302,7 @@ async function deleteMypageStudyMemo(memoId, summaryId) {
         'X-User-Id': String(userId)
       },
       body: JSON.stringify({
-        id: memoId // StudyMemoRequest의 Long id 매핑
+        memoId: memoId // StudyMemoRequest의 Long id 매핑
       })
     });
 
@@ -382,7 +382,7 @@ async function renderMyPageMockData(tabId) {
           : (note.cratedAt || '확인 불가');
 
         return `
-          <div class="post-item" onclick="loadSavedSummaryToStudyPage(${note.id})" style="cursor:pointer; margin-bottom:12px;">
+          <div class="post-item" onclick="loadSavedSummaryToStudyPage(${note.summaryId})" style="cursor:pointer; margin-bottom:12px;">
             <div class="post-main">
               <div class="post-title" style="font-weight:600; font-size:16px; color:var(--text1); margin-bottom:8px;">
                 📄 요약 노트
@@ -473,7 +473,7 @@ async function renderMyPageMockData(tabId) {
               
               ${typeof window.deleteNote === 'function' ? `
                 <button 
-                  onclick="if(confirm('이 오답노트를 삭제하시겠습니까?')){ window.deleteNote(${note.id}).then(() => switchMyPageTab('quiz', document.querySelector('#mypage-tabs .btab.active')) ) }"
+                  onclick="if(confirm('이 오답노트를 삭제하시겠습니까?')){ window.deleteNote(${note.wrongId}).then(() => switchMyPageTab('quiz', document.querySelector('#mypage-tabs .btab.active')) ) }"
                   style="background:transparent; border:none; color:var(--text3); font-size:12px; cursor:pointer; text-decoration:underline;"
                   onmouseover="this.style.color='#ef4444'"
                   onmouseout="this.style.color='var(--text3)'"

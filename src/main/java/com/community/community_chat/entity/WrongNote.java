@@ -19,21 +19,22 @@ public class WrongNote {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "wrong_id")
+    private Long wrongId;
 
     private String subject;
     private String title;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String q;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String wrong;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String correct;
 
     private String date;
@@ -42,17 +43,17 @@ public class WrongNote {
     private String questionType;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String optionsJson;
 
     private Integer answerIdx;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String answerKeywordsJson;
 
     private boolean debugSolved;
-    private boolean relapsed;
+    private Long cooldownUntil;
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public void applyDefaults() {

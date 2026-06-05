@@ -19,11 +19,14 @@ public class LearningDataService {
     private final ReverseLearningLogRepository reverseLearningLogRepository;
     private final StudyMemoRepository studyMemoRepository;
 
-    public SummaryNote saveSummary(String userId, String summary, String quizQuestion, String quizAnswer) {
+    public SummaryNote saveSummary(String userId, String summary, String visualPagesJson, String visualSummary) {
         SummaryNote note = new SummaryNote();
         note.setSummary(summary);
         note.setPageNumber(1);
         note.setUserId(userId);
+        note.setVisualPagesJson(visualPagesJson == null ? "[]" : visualPagesJson);
+        note.setVisualSummary(visualSummary == null ? "" : visualSummary);
+
         return summaryNoteRepository.save(note);
     }
 

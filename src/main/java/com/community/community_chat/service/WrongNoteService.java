@@ -14,7 +14,7 @@ public class WrongNoteService {
     private final WrongNoteRepository wrongNoteRepository;
 
     public List<WrongNote> getAllNotes(String userId) {
-        return wrongNoteRepository.findByUserIdOrderByIdDesc(normalizeUserId(userId));
+        return wrongNoteRepository.findByUserIdOrderByWrongIdDesc(normalizeUserId(userId));
     }
 
     public WrongNote saveNote(String userId, WrongNote note) {
@@ -23,10 +23,10 @@ public class WrongNoteService {
         return wrongNoteRepository.save(note);
     }
 
-    public WrongNote updateNote(String userId, Long id, WrongNote request) {
+    public WrongNote updateNote(String userId, Long wrongId, WrongNote request) {
         String normalizedUserId = normalizeUserId(userId);
-        WrongNote note = wrongNoteRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Wrong note not found: " + id));
+        WrongNote note = wrongNoteRepository.findById(wrongId)
+                .orElseThrow(() -> new IllegalArgumentException("Wrong note not found: " + wrongId));
         if (!normalizedUserId.equals(note.getUserId())) {
             throw new IllegalArgumentException("Wrong note does not belong to this user.");
         }
@@ -43,17 +43,17 @@ public class WrongNoteService {
         note.setAnswerIdx(request.getAnswerIdx());
         note.setAnswerKeywordsJson(request.getAnswerKeywordsJson());
         note.setDebugSolved(request.isDebugSolved());
-        note.setRelapsed(request.isRelapsed());
+        note.setCooldownUntil(request.getCooldownUntil());
         note.setUserId(normalizedUserId);
         note.applyDefaults();
 
         return wrongNoteRepository.save(note);
     }
 
-    public void deleteNote(String userId, Long id) {
+    public void deleteNote(String userId, Long wrongId) {
         String normalizedUserId = normalizeUserId(userId);
-        WrongNote note = wrongNoteRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Wrong note not found: " + id));
+        WrongNote note = wrongNoteRepository.findById(wrongId)
+                .orElseThrow(() -> new IllegalArgumentException("Wrong note not found: " + wrongId));
         if (!normalizedUserId.equals(note.getUserId())) {
             throw new IllegalArgumentException("Wrong note does not belong to this user.");
         }

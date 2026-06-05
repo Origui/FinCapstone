@@ -27,7 +27,8 @@ public class CommunityService {
     private final String uploadDir = "C:/upload/community/";
 
     public List<PostResponse> getPosts() {
-        return postRepository.findByDeletedFalseOrderByCreatedAtDesc()
+        // 이곳의 메서드 명도 함께 맞춰줍니다.
+        return postRepository.findByOrderByCreatedAtDesc()
                 .stream()
                 .map(this::toPostResponse)
                 .toList();
@@ -106,8 +107,8 @@ public class CommunityService {
             throw new RuntimeException("삭제 권한이 없습니다.");
         }
 
-        post.setDeleted(true);
-        postRepository.save(post);
+        // 🛠️ 논리 삭제 대신 데이터베이스에서 완전히 삭제(Hard Delete)
+        postRepository.delete(post);
     }
 
     public CommentResponse createComment(CommentRequest request) {
@@ -182,6 +183,11 @@ public class CommunityService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        boolean alreadyReported = postReportRepository.existsByPostAndUser(post, user);
+        if (alreadyReported) {
+            throw new RuntimeException("이미 신고한 게시글입니다."); // 👈 이 글자를 프론트로 보냅니다.
+        }
 
         PostReport report = new PostReport();
         report.setPost(post);

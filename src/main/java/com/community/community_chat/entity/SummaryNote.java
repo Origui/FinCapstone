@@ -13,13 +13,23 @@ public class SummaryNote {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "summary_id")
+    private Long summaryId;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(columnDefinition = "LONGTEXT")
     private String summary;
 
     private int pageNumber;
     private String userId;
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String visualPagesJson;
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String visualSummary;
+
     private LocalDateTime cratedAt = LocalDateTime.now();
 }

@@ -1,8 +1,8 @@
 const notesApi = {
   list: '/api/notes',
   create: '/api/notes',
-  update: id => `/api/notes/${id}`,
-  remove: id => `/api/notes/${id}`
+  update: wrongId => `/api/notes/${wrongId}`,
+  remove: wrongId => `/api/notes/${wrongId}`
 };
 
 const noteCategories = ['자료구조', '알고리즘', '운영체제'];
@@ -71,7 +71,7 @@ function loadNotesFromLocalStorage() {
 
 async function createNoteViaApi(note) {
   const normalized = normalizeNote(note);
-  const createPayload = { ...normalized, id: null };
+  const createPayload = { ...normalized, wrongId: null };
 
   try {
     const response = await fetch(notesApi.create, {
@@ -92,10 +92,10 @@ async function createNoteViaApi(note) {
 }
 
 async function updateNoteViaApi(note) {
-  if (!note || note.localOnly || !note.id) return note;
+  if (!note || note.localOnly || !note.wrongId) return note;
 
   try {
-    const response = await fetch(notesApi.update(note.id), {
+    const response = await fetch(notesApi.update(note.wrongId), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -118,7 +118,7 @@ function scheduleNotesSync() {
 }
 
 async function syncPersistedNotes() {
-  const persistedNotes = notes.filter(note => !note.localOnly && note.id);
+  const persistedNotes = notes.filter(note => !note.localOnly && note.wrongId);
   await Promise.all(persistedNotes.map(updateNoteViaApi));
 }
 
@@ -178,7 +178,7 @@ function normalizeNote(note) {
   const inferredSubject = inferSubject(`${note.q || ''} ${note.correct || ''} ${note.title || ''}`);
   const subject = inferredSubject || normalizeSubject(note.subject || `${note.title || ''} ${note.q || ''} ${note.correct || ''}`);
   return {
-    id: note.id || Date.now(),
+    wrongId: note.wrongId || note.wrong_id || note.id || Date.now(),
     subject,
     title: note.title || '오답노트',
     q: note.q || '',
@@ -191,7 +191,7 @@ function normalizeNote(note) {
     answerIdx,
     answerKeywordsJson: note.answerKeywordsJson || '[]',
     debugSolved: Boolean(note.debugSolved),
-    relapsed: Boolean(note.relapsed),
+    cooldownUntil: note.cooldownUntil || null,
     userId: note.userId || getActiveUserId(),
     localOnly: Boolean(note.localOnly)
   };

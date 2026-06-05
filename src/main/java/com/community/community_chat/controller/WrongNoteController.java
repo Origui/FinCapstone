@@ -38,19 +38,19 @@ public class WrongNoteController {
         return ResponseEntity.ok(wrongNoteService.saveNote(userId, note));
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/{wrongId}")
     public ResponseEntity<WrongNote> updateNote(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
-            @PathVariable Long id,
+            @PathVariable Long wrongId,
             @RequestBody WrongNote note) {
-        return ResponseEntity.ok(wrongNoteService.updateNote(userId, id, note));
+        return ResponseEntity.ok(wrongNoteService.updateNote(userId, wrongId, note));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{wrongId}")
     public ResponseEntity<Void> deleteNote(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
-            @PathVariable Long id) {
-        wrongNoteService.deleteNote(userId, id);
+            @PathVariable Long wrongId) {
+        wrongNoteService.deleteNote(userId, wrongId);
         return ResponseEntity.noContent().build();
     }
 }
