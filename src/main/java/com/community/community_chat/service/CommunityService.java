@@ -150,8 +150,7 @@ public class CommunityService {
             throw new RuntimeException("삭제 권한이 없습니다.");
         }
 
-        comment.setDeleted(true);
-        commentRepository.save(comment);
+        commentRepository.delete(comment);
     }
 
     public PostResponse likePost(Long postId, Long userId) {
